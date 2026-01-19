@@ -27,6 +27,73 @@
         from { transform: rotate(0deg); }
         to { transform: rotate(360deg); }
       }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+
+      /* SVG Icon styles */
+      .tool-chevron {
+        width: 14px;
+        height: 14px;
+        color: #666;
+        flex-shrink: 0;
+        transition: transform 0.15s ease;
+      }
+
+      .tool-spinner {
+        width: 14px;
+        height: 14px;
+        color: #6366f1;
+        animation: spin 1s linear infinite;
+      }
+
+      .tool-check {
+        width: 14px;
+        height: 14px;
+        color: #4ade80;
+      }
+
+      .tool-spinner-small {
+        width: 100%;
+        height: 100%;
+        color: #6366f1;
+        animation: spin 1s linear infinite;
+      }
+
+      .tool-success-icon {
+        width: 100%;
+        height: 100%;
+        color: #4ade80;
+      }
+
+      .tool-error-icon {
+        width: 100%;
+        height: 100%;
+        color: #ef4444;
+      }
+
+      .tool-summary-chevron {
+        width: 12px;
+        height: 12px;
+        color: #666;
+        flex-shrink: 0;
+        transition: transform 0.15s ease;
+      }
+
+      .todo-check {
+        width: 100%;
+        height: 100%;
+        color: #4ade80;
+      }
+
+      .todo-spinner {
+        width: 100%;
+        height: 100%;
+        color: #facc15;
+        animation: spin 1s linear infinite;
+      }
     </style>
   </head>
   <body>

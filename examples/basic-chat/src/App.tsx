@@ -4,6 +4,54 @@ import type { ChatMessage, ToolUseData, TodoItem } from '@anthropic/claude-chat-
 
 const WS_URL = 'ws://100.85.122.99:3456/ws';
 
+// Format duration in milliseconds to human-readable string
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  return `${Math.round(ms / 100) / 10}s`;
+}
+
+// SVG Icons (inline to avoid dependencies)
+function LoaderIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M21 12a9 9 0 11-6.219-8.56" />
+    </svg>
+  );
+}
+
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+function AlertIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="8" x2="12" y2="12" />
+      <line x1="12" y1="16" x2="12.01" y2="16" />
+    </svg>
+  );
+}
+
+function ChevronIcon({ className, direction = 'right' }: { className?: string; direction?: 'right' | 'down' }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      style={{ transform: direction === 'down' ? 'rotate(90deg)' : undefined }}
+    >
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
+  );
+}
+
 export default function App() {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -28,7 +76,7 @@ export default function App() {
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamingContent]);
+  }, [messages, streamingContent, activeTools]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,7 +128,6 @@ export default function App() {
             <ToolGroupView
               tools={[]}
               activeTools={activeTools}
-              isStreaming={true}
             />
           )}
 
@@ -88,7 +135,10 @@ export default function App() {
           {isStreaming && streamingContent && (
             <div style={{ ...styles.message, ...styles.assistantMessage }}>
               <div style={styles.messageRole}>Claude</div>
-              <div style={styles.messageContent}>{streamingContent}</div>
+              <div style={styles.messageContent}>
+                {streamingContent}
+                <span style={styles.cursor}>▋</span>
+              </div>
             </div>
           )}
 
@@ -151,7 +201,6 @@ function MessageView({ message }: { message: ChatMessage }) {
         <ToolGroupView
           tools={message.tools}
           activeTools={[]}
-          isStreaming={false}
         />
       )}
     </div>
@@ -161,42 +210,49 @@ function MessageView({ message }: { message: ChatMessage }) {
 function ToolGroupView({
   tools,
   activeTools,
-  isStreaming
 }: {
   tools: ToolUseData[];
   activeTools: ToolUseData[];
-  isStreaming: boolean;
 }) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  // Default to expanded (like Andy's UI)
+  const [isExpanded, setIsExpanded] = useState(true);
 
-  const allTools = [...tools, ...activeTools];
+  const allTools = [...activeTools, ...tools];
   if (allTools.length === 0) return null;
 
   const hasActive = activeTools.length > 0;
-  const completedCount = tools.length;
-  const activeCount = activeTools.length;
+  const errorCount = allTools.filter(t => t.error).length;
+  const totalCount = allTools.length;
 
   const headerText = hasActive
-    ? `Using ${activeCount + completedCount} tool${activeCount + completedCount !== 1 ? 's' : ''}...`
-    : `Used ${completedCount} tool${completedCount !== 1 ? 's' : ''}`;
+    ? `Using ${totalCount} tool${totalCount !== 1 ? 's' : ''}`
+    : `Used ${totalCount} tool${totalCount !== 1 ? 's' : ''}`;
 
   return (
     <div style={styles.toolGroup}>
+      {/* Collapsed summary - clickable to expand */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         style={styles.toolGroupHeader}
       >
-        <span style={styles.toolGroupIcon}>
-          {hasActive ? (
-            <span style={styles.spinner}>⟳</span>
-          ) : (
-            <span style={styles.checkIcon}>✓</span>
+        <ChevronIcon
+          className="tool-chevron"
+          direction={isExpanded ? 'down' : 'right'}
+        />
+        <span style={styles.toolGroupTitle}>
+          {headerText}
+          {errorCount > 0 && (
+            <span style={styles.errorCount}> ({errorCount} failed)</span>
           )}
         </span>
-        <span style={styles.toolGroupTitle}>{headerText}</span>
-        <span style={styles.expandIcon}>{isExpanded ? '▼' : '▶'}</span>
+        {hasActive ? (
+          <LoaderIcon className="tool-spinner" />
+        ) : (
+          <CheckIcon className="tool-check" />
+        )}
       </button>
 
+      {/* Expanded tool list */}
       {isExpanded && (
         <div style={styles.toolGroupContent}>
           {allTools.map((tool) => (
@@ -216,6 +272,10 @@ function ToolItemView({ tool, isActive }: { tool: ToolUseData; isActive: boolean
   const [showSummary, setShowSummary] = useState(false);
 
   const hasSummary = tool.summary && tool.summary.length > 0;
+  const summaryLines = tool.summary?.split('\n') || [];
+  const lineCount = summaryLines.length;
+  const previewLimit = 3;
+  const hasMoreLines = lineCount > previewLimit;
 
   return (
     <div style={styles.toolItem}>
@@ -223,27 +283,79 @@ function ToolItemView({ tool, isActive }: { tool: ToolUseData; isActive: boolean
         style={styles.toolItemHeader}
         onClick={() => hasSummary && setShowSummary(!showSummary)}
       >
-        <span style={styles.toolItemIcon}>
+        {/* Status icon */}
+        <div style={styles.toolItemIcon}>
           {isActive ? (
-            <span style={styles.spinnerSmall}>⟳</span>
+            <LoaderIcon className="tool-spinner-small" />
           ) : tool.error ? (
-            <span style={styles.errorIcon}>✗</span>
+            <AlertIcon className="tool-error-icon" />
           ) : (
-            <span style={styles.successIcon}>✓</span>
+            <CheckIcon className="tool-success-icon" />
           )}
-        </span>
-        <span style={styles.toolItemName}>{tool.friendly || tool.name}</span>
-        {tool.duration && (
-          <span style={styles.toolItemDuration}>{tool.duration}ms</span>
-        )}
+        </div>
+
+        {/* Tool name and details */}
+        <div style={styles.toolItemContent}>
+          <div style={styles.toolItemNameRow}>
+            <span style={{
+              ...styles.toolItemName,
+              color: isActive ? '#eee' : '#888',
+            }}>
+              {tool.friendly || tool.name}
+            </span>
+            {tool.duration && tool.duration > 0 && (
+              <span style={styles.toolItemDuration}>
+                {formatDuration(tool.duration)}
+              </span>
+            )}
+          </div>
+          {/* Input detail (file path, command, etc.) */}
+          {tool.inputDetail && (
+            <div style={styles.toolInputDetail}>
+              {tool.inputDetail}
+            </div>
+          )}
+        </div>
+
         {hasSummary && (
-          <span style={styles.summaryToggle}>{showSummary ? '▼' : '▶'}</span>
+          <ChevronIcon
+            className="tool-summary-chevron"
+            direction={showSummary ? 'down' : 'right'}
+          />
         )}
       </div>
 
+      {/* Summary preview */}
+      {hasSummary && !showSummary && !isActive && (
+        <div
+          style={styles.summaryPreview}
+          onClick={() => setShowSummary(true)}
+        >
+          {summaryLines.slice(0, previewLimit).map((line, i) => (
+            <div key={i} style={{
+              ...styles.summaryLine,
+              color: tool.error ? 'rgba(239, 68, 68, 0.8)' : 'rgba(74, 222, 128, 0.8)',
+            }}>
+              {line || '\u00A0'}
+            </div>
+          ))}
+          {hasMoreLines && (
+            <div style={styles.summaryMore}>
+              +{lineCount - previewLimit} more lines
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Expanded summary */}
       {showSummary && tool.summary && (
         <div style={styles.toolSummary}>
-          <pre style={styles.summaryText}>{tool.summary}</pre>
+          <pre style={{
+            ...styles.summaryText,
+            color: tool.error ? 'rgba(239, 68, 68, 0.8)' : 'rgba(74, 222, 128, 0.8)',
+          }}>
+            {tool.summary}
+          </pre>
         </div>
       )}
     </div>
@@ -251,13 +363,6 @@ function ToolItemView({ tool, isActive }: { tool: ToolUseData; isActive: boolean
 }
 
 function TodoItemView({ todo }: { todo: TodoItem }) {
-  const icon =
-    todo.status === 'completed'
-      ? '✓'
-      : todo.status === 'in_progress'
-      ? '→'
-      : '○';
-
   return (
     <div
       style={{
@@ -266,7 +371,15 @@ function TodoItemView({ todo }: { todo: TodoItem }) {
         ...(todo.status === 'in_progress' ? styles.todoActive : {}),
       }}
     >
-      <span style={styles.todoIcon}>{icon}</span>
+      <div style={styles.todoIcon}>
+        {todo.status === 'completed' ? (
+          <CheckIcon className="todo-check" />
+        ) : todo.status === 'in_progress' ? (
+          <LoaderIcon className="todo-spinner" />
+        ) : (
+          <span style={styles.todoPending}>○</span>
+        )}
+      </div>
       <span>
         {todo.status === 'in_progress' && todo.activeForm
           ? todo.activeForm
@@ -330,17 +443,19 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '24px',
   },
   message: {
-    marginBottom: '20px',
+    marginBottom: '16px',
     padding: '16px',
-    borderRadius: '12px',
+    borderRadius: '16px',
   },
   userMessage: {
-    background: '#2d2d4a',
+    background: 'rgba(99, 102, 241, 0.15)',
     marginLeft: '40px',
+    borderTopRightRadius: '4px',
   },
   assistantMessage: {
     background: '#1e1e36',
     marginRight: '40px',
+    borderTopLeftRadius: '4px',
   },
   messageRole: {
     fontSize: '12px',
@@ -353,13 +468,16 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.6,
     whiteSpace: 'pre-wrap',
   },
+  cursor: {
+    opacity: 0.7,
+    animation: 'pulse 1s ease-in-out infinite',
+  },
   toolGroup: {
-    marginBottom: '20px',
-    marginRight: '40px',
-    padding: '12px 16px',
-    background: '#1a1a2e',
+    marginTop: '12px',
+    background: 'rgba(255, 255, 255, 0.03)',
     borderRadius: '12px',
-    border: '1px solid #333',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    overflow: 'hidden',
   },
   toolGroupHeader: {
     display: 'flex',
@@ -369,95 +487,96 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '10px 12px',
     background: 'transparent',
     border: 'none',
-    color: '#ccc',
-    fontSize: '13px',
+    color: '#888',
+    fontSize: '12px',
     cursor: 'pointer',
     textAlign: 'left' as const,
   },
-  toolGroupIcon: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '18px',
-    height: '18px',
-  },
   toolGroupTitle: {
     flex: 1,
-    fontWeight: 500,
   },
-  expandIcon: {
-    fontSize: '10px',
-    color: '#666',
+  errorCount: {
+    color: '#ef4444',
   },
   toolGroupContent: {
-    borderTop: '1px solid #333',
-    padding: '8px 0',
+    borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+    padding: '8px 12px',
   },
   toolItem: {
-    padding: '0 12px',
+    padding: '6px 0',
   },
   toolItemHeader: {
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: '8px',
-    padding: '6px 0',
     cursor: 'pointer',
   },
   toolItemIcon: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
     width: '16px',
     height: '16px',
-    fontSize: '12px',
+    marginTop: '2px',
+    flexShrink: 0,
+  },
+  toolItemContent: {
+    flex: 1,
+    minWidth: 0,
+  },
+  toolItemNameRow: {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: '8px',
+    flexWrap: 'wrap' as const,
   },
   toolItemName: {
-    flex: 1,
-    fontSize: '13px',
-    color: '#aaa',
+    fontSize: '12px',
+    fontWeight: 500,
   },
   toolItemDuration: {
-    fontSize: '11px',
-    color: '#666',
-  },
-  summaryToggle: {
     fontSize: '10px',
-    color: '#666',
+    color: 'rgba(136, 136, 136, 0.5)',
+  },
+  toolInputDetail: {
+    fontSize: '11px',
+    color: 'rgba(136, 136, 136, 0.7)',
+    marginTop: '2px',
+    whiteSpace: 'pre' as const,
+    overflow: 'auto',
+  },
+  summaryPreview: {
+    marginTop: '6px',
+    marginLeft: '24px',
+    padding: '6px 8px',
+    background: 'rgba(0, 0, 0, 0.2)',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '10px',
+    fontFamily: 'monospace',
+  },
+  summaryLine: {
+    whiteSpace: 'pre' as const,
+    lineHeight: 1.4,
+  },
+  summaryMore: {
+    marginTop: '4px',
+    fontSize: '9px',
+    color: 'rgba(136, 136, 136, 0.5)',
   },
   toolSummary: {
-    padding: '8px 0 8px 24px',
+    marginTop: '8px',
+    marginLeft: '24px',
   },
   summaryText: {
     margin: 0,
-    padding: '8px',
-    background: '#0d0d1a',
-    borderRadius: '4px',
-    fontSize: '12px',
-    color: '#888',
+    padding: '10px',
+    background: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: '6px',
+    fontSize: '11px',
+    fontFamily: 'monospace',
     whiteSpace: 'pre-wrap' as const,
     wordBreak: 'break-word' as const,
-    maxHeight: '150px',
+    maxHeight: '200px',
     overflow: 'auto',
-  },
-  spinner: {
-    display: 'inline-block',
-    animation: 'spin 1s linear infinite',
-    color: '#facc15',
-  },
-  spinnerSmall: {
-    display: 'inline-block',
-    animation: 'spin 1s linear infinite',
-    color: '#facc15',
-    fontSize: '12px',
-  },
-  checkIcon: {
-    color: '#4ade80',
-  },
-  successIcon: {
-    color: '#4ade80',
-  },
-  errorIcon: {
-    color: '#ef4444',
+    lineHeight: 1.5,
   },
   todoItem: {
     display: 'flex',
@@ -476,6 +595,11 @@ const styles: Record<string, React.CSSProperties> = {
   },
   todoIcon: {
     width: '16px',
+    height: '16px',
+  },
+  todoPending: {
+    fontSize: '14px',
+    lineHeight: 1,
   },
   error: {
     margin: '0 24px 16px',

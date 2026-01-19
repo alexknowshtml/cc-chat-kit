@@ -75,23 +75,20 @@ export default function App() {
             <MessageView key={msg.id} message={msg} />
           ))}
 
-          {/* Streaming response with active tools inline */}
-          {isStreaming && (activeTools.length > 0 || streamingContent) && (
+          {/* Active tools - separate bubble */}
+          {isStreaming && activeTools.length > 0 && (
+            <ToolGroupView
+              tools={[]}
+              activeTools={activeTools}
+              isStreaming={true}
+            />
+          )}
+
+          {/* Streaming text */}
+          {isStreaming && streamingContent && (
             <div style={{ ...styles.message, ...styles.assistantMessage }}>
               <div style={styles.messageRole}>Claude</div>
-              {activeTools.length > 0 && (
-                <ToolGroupView
-                  tools={[]}
-                  activeTools={activeTools}
-                  isStreaming={true}
-                />
-              )}
-              {streamingContent && (
-                <div style={styles.messageContent}>{streamingContent}</div>
-              )}
-              {!streamingContent && activeTools.length > 0 && (
-                <div style={styles.messageContent}>...</div>
-              )}
+              <div style={styles.messageContent}>{streamingContent}</div>
             </div>
           )}
 
@@ -357,10 +354,12 @@ const styles: Record<string, React.CSSProperties> = {
     whiteSpace: 'pre-wrap',
   },
   toolGroup: {
-    marginTop: '12px',
-    background: '#16162a',
-    borderRadius: '8px',
-    overflow: 'hidden',
+    marginBottom: '20px',
+    marginRight: '40px',
+    padding: '12px 16px',
+    background: '#1a1a2e',
+    borderRadius: '12px',
+    border: '1px solid #333',
   },
   toolGroupHeader: {
     display: 'flex',

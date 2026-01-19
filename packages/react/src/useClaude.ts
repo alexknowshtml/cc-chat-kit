@@ -147,7 +147,8 @@ export function useClaude(options: UseClaudeOptions): UseClaudeReturn {
             setIsStreaming(false);
 
             // Use refs to get current values (avoids stale closure)
-            const finalContent = streamingContentRef.current + (payload.content || '');
+            // Note: Don't add payload.content - all content is already in streamingContentRef via tokens
+            const finalContent = streamingContentRef.current;
             const finalTools = [...completedToolsRef.current];
 
             setMessages((prev) => {

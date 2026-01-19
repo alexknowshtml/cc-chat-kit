@@ -32,7 +32,7 @@ bun run dev:server
 bun run packages/server/src/index.ts
 ```
 
-The server runs on `ws://localhost:3000/ws` by default.
+The server runs on `ws://localhost:3457/ws` by default.
 
 ### 3. Run the example app
 
@@ -51,7 +51,7 @@ Open http://localhost:5173 to chat with Claude.
 import { createClaudeServer } from '@anthropic/claude-chat-server';
 
 const server = createClaudeServer({
-  port: 3000,
+  port: 3457,
   projectPath: '/path/to/your/project',  // CWD for Claude CLI
   claudePath: '~/.local/bin/claude',     // Optional, auto-detected
 
@@ -67,7 +67,7 @@ server.start();
 
 ### Environment Variables
 
-- `PORT` - Server port (default: 3000)
+- `PORT` - Server port (default: 3457)
 - `PROJECT_PATH` - Project directory for Claude CLI context (default: cwd)
 
 ## React Client Usage
@@ -87,7 +87,7 @@ function Chat() {
     send,          // Send a message
     cancel,        // Cancel current response
   } = useClaude({
-    url: 'ws://localhost:3000/ws',
+    url: 'ws://localhost:3457/ws',
     sessionId: 'optional-resume-id',  // Resume a previous session
   });
 
@@ -191,13 +191,15 @@ interface WebSocketMessage<T> {
 
 ## Architecture
 
+### System Overview
+
 ```
 ┌─────────────────┐     WebSocket      ┌─────────────────┐
 │   React App     │ ◄────────────────► │   Bun Server    │
-│   useClaude()   │                    │                 │
+│   useClaude()   │    (port 3457)     │                 │
 └─────────────────┘                    └────────┬────────┘
                                                 │
-                                                │ spawn
+                                                │ Bun.spawn()
                                                 ▼
                                        ┌─────────────────┐
                                        │   Claude CLI    │
@@ -206,6 +208,188 @@ interface WebSocketMessage<T> {
 ```
 
 The server spawns Claude CLI with `--output-format stream-json` and parses the streaming output, broadcasting events to connected WebSocket clients.
+
+### Message Flow
+
+```
+User types message
+        │
+        ▼
+┌───────────────────────────────────────────────────────────────┐
+│  React Hook (useClaude)                                       │
+│  ┌─────────────────┐                                          │
+│  │ send("hello")   │──────► WebSocket.send({                  │
+│  └─────────────────┘          type: "chat",                   │
+│                               payload: { action: "send" }     │
+│                             })                                │
+└───────────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌───────────────────────────────────────────────────────────────┐
+│  Bun Server                                                   │
+│  ┌─────────────────┐    ┌──────────────────────────────────┐  │
+│  │ Parse message   │───►│ Spawn: claude -p "hello"         │  │
+│  └─────────────────┘    │        --output-format stream-json│  │
+│                         └──────────────────────────────────┘  │
+└───────────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌───────────────────────────────────────────────────────────────┐
+│  Claude CLI streams JSON events                               │
+│                                                               │
+│  {"type":"assistant","message":{"content":[{"type":"text"...  │
+│  {"type":"content_block_delta","delta":{"text":"Hello"}}      │
+│  {"type":"content_block_delta","delta":{"text":"!"}}          │
+│  {"type":"result","result":"success"}                         │
+└───────────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌───────────────────────────────────────────────────────────────┐
+│  Server parses stream, broadcasts to clients                  │
+│                                                               │
+│  ──► { type: "chat", payload: { action: "token",              │
+│        content: "Hello" }}                                    │
+│  ──► { type: "chat", payload: { action: "token",              │
+│        content: "!" }}                                        │
+│  ──► { type: "chat", payload: { action: "complete" }}         │
+└───────────────────────────────────────────────────────────────┘
+```
+
+### Tool Execution Flow
+
+```
+Claude decides to use a tool
+        │
+        ▼
+┌───────────────────────────────────────────────────────────────┐
+│  Server receives tool_use from CLI                            │
+│                                                               │
+│  {"type":"content_block_start",                               │
+│   "content_block":{"type":"tool_use","name":"Read",...}}      │
+└───────────────────────────────────────────────────────────────┘
+        │
+        ├──────────────────────────────────────┐
+        ▼                                      ▼
+┌─────────────────────┐              ┌─────────────────────────┐
+│ Broadcast to client │              │ Track in activeTools    │
+│                     │              │ (server-side state)     │
+│ { action: "tool_start",            └─────────────────────────┘
+│   tool: {                                    │
+│     id: "tool_xxx",                          │
+│     name: "Read",                            │ Tool executes...
+│     friendly: "Reading file",                │
+│     startTime: 1234567890                    │
+│   }                                          ▼
+│ }                              ┌─────────────────────────────┐
+└─────────────────────┘          │ Tool completes, CLI outputs │
+                                 │ tool_result event           │
+                                 └─────────────────────────────┘
+                                               │
+                                               ▼
+                                 ┌─────────────────────────────┐
+                                 │ Broadcast to client         │
+                                 │                             │
+                                 │ { action: "tool_end",       │
+                                 │   tool: {                   │
+                                 │     id: "tool_xxx",         │
+                                 │     duration: 1234,         │
+                                 │     summary: "Read 50 lines"│
+                                 │   }                         │
+                                 │ }                           │
+                                 └─────────────────────────────┘
+```
+
+### Interleaved Content Blocks
+
+The UI renders content in the order it occurs, not grouped by type:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Claude's Response                                           │
+│                                                             │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │ TEXT BLOCK                                             │ │
+│  │ "Let me check that file for you."                      │ │
+│  └────────────────────────────────────────────────────────┘ │
+│                          │                                  │
+│                          ▼                                  │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │ TOOL GROUP                                             │ │
+│  │ ┌────────────────────────────────────────────────────┐ │ │
+│  │ │ ✓ Reading file src/index.ts          0.3s         │ │ │
+│  │ │   export function main() { ...                    │ │ │
+│  │ └────────────────────────────────────────────────────┘ │ │
+│  └────────────────────────────────────────────────────────┘ │
+│                          │                                  │
+│                          ▼                                  │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │ TEXT BLOCK                                             │ │
+│  │ "I see the issue. The function is missing a return    │ │
+│  │  statement. Let me fix that."                         │ │
+│  └────────────────────────────────────────────────────────┘ │
+│                          │                                  │
+│                          ▼                                  │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │ TOOL GROUP                                             │ │
+│  │ ┌────────────────────────────────────────────────────┐ │ │
+│  │ │ ✓ Editing file src/index.ts          0.5s         │ │ │
+│  │ │   Added return statement                          │ │ │
+│  │ └────────────────────────────────────────────────────┘ │ │
+│  └────────────────────────────────────────────────────────┘ │
+│                          │                                  │
+│                          ▼                                  │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │ TEXT BLOCK                                             │ │
+│  │ "Done! The function now returns the expected value."   │ │
+│  └────────────────────────────────────────────────────────┘ │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+This is tracked via `ContentBlock` types in the React hook:
+
+```typescript
+type ContentBlock =
+  | { type: 'text'; content: string; timestamp: number }
+  | { type: 'tool_group'; tools: ToolUseData[]; timestamp: number };
+```
+
+### Session Reconnection
+
+```
+Client disconnects (network issue, etc.)
+        │
+        ▼
+┌───────────────────────────────────────────────────────────────┐
+│  React Hook detects disconnect                                │
+│  - Sets status = 'reconnecting'                               │
+│  - Saves lastSeq (last message sequence number)               │
+└───────────────────────────────────────────────────────────────┘
+        │
+        │ Exponential backoff (2s, 4s, 8s...)
+        ▼
+┌───────────────────────────────────────────────────────────────┐
+│  Reconnect attempt                                            │
+│  - Opens new WebSocket                                        │
+│  - Sends subscribe with sessionId                             │
+└───────────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌───────────────────────────────────────────────────────────────┐
+│  Server receives subscribe                                    │
+│  - Finds session state                                        │
+│  - Sends snapshot of current state                            │
+│  - Client catches up on missed events                         │
+└───────────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌───────────────────────────────────────────────────────────────┐
+│  Client restored                                              │
+│  - Messages, tools, todos all synced                          │
+│  - status = 'connected'                                       │
+│  - Streaming continues if in progress                         │
+└───────────────────────────────────────────────────────────────┘
+```
 
 ## Features
 

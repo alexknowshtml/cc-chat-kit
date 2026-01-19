@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { useClaude } from '@anthropic/claude-chat-react';
-import type { ChatMessage, ToolUseData, TodoItem } from '@anthropic/claude-chat-react';
+import { Streamdown } from 'streamdown';
+import type { ChatMessage, ToolUseData, TodoItem, ContentBlock } from '@anthropic/claude-chat-react';
 
-const WS_URL = 'ws://100.85.122.99:3456/ws';
+const WS_URL = 'ws://100.85.122.99:3457/ws';
 
 // Format duration in milliseconds to human-readable string
 function formatDuration(ms: number): string {
@@ -167,48 +168,96 @@ export default function App() {
 function MessageView({ message, isStreaming }: { message: ChatMessage; isStreaming?: boolean }) {
   const isUser = message.role === 'user';
 
-  // Separate active vs completed tools
-  // Active tools have no duration yet (undefined or 0)
+  // User messages - simple render
+  if (isUser) {
+    return (
+      <div style={{ ...styles.message, ...styles.userMessage }}>
+        <div style={styles.messageRole}>You</div>
+        <div style={styles.messageContent}>{message.content}</div>
+      </div>
+    );
+  }
+
+  // Assistant messages - render interleaved content blocks if available
+  const hasContentBlocks = message.contentBlocks && message.contentBlocks.length > 0;
+
+  if (hasContentBlocks) {
+    return (
+      <div style={styles.assistantWrapper}>
+        <div style={styles.messageRole}>Claude</div>
+        {message.contentBlocks!.map((block, idx) => (
+          <ContentBlockView
+            key={idx}
+            block={block}
+            isLast={idx === message.contentBlocks!.length - 1}
+            isStreaming={isStreaming}
+          />
+        ))}
+        {isStreaming && <span style={styles.cursor}>▋</span>}
+      </div>
+    );
+  }
+
+  // Fallback: legacy rendering for messages without contentBlocks
   const activeTools = message.tools?.filter(t => t.duration === undefined) || [];
   const completedTools = message.tools?.filter(t => t.duration !== undefined) || [];
   const hasTools = (message.tools?.length || 0) > 0;
 
-  // For assistant messages, render tools as a separate element above the message bubble
-  if (!isUser) {
-    return (
-      <>
-        {/* Tool group - separate bubble above message */}
-        {hasTools && (
-          <div style={styles.toolGroupWrapper}>
-            <div style={styles.messageRole}>Claude</div>
-            <ToolGroupView
-              tools={completedTools}
-              activeTools={activeTools}
-            />
-          </div>
-        )}
+  return (
+    <>
+      {hasTools && (
+        <div style={styles.toolGroupWrapper}>
+          <div style={styles.messageRole}>Claude</div>
+          <ToolGroupView
+            tools={completedTools}
+            activeTools={activeTools}
+          />
+        </div>
+      )}
 
-        {/* Message bubble - only if there's content or streaming without tools */}
-        {(message.content || (isStreaming && !hasTools)) && (
-          <div style={{ ...styles.message, ...styles.assistantMessage }}>
-            {!hasTools && <div style={styles.messageRole}>Claude</div>}
-            <div style={styles.messageContent}>
-              {message.content || '...'}
-              {isStreaming && message.content && <span style={styles.cursor}>▋</span>}
-            </div>
+      {(message.content || (isStreaming && !hasTools)) && (
+        <div style={{ ...styles.message, ...styles.assistantMessage }}>
+          {!hasTools && <div style={styles.messageRole}>Claude</div>}
+          <div style={styles.messageContent} className="streamdown-content">
+            <Streamdown>{message.content || '...'}</Streamdown>
+            {isStreaming && message.content && <span style={styles.cursor}>▋</span>}
           </div>
-        )}
-      </>
+        </div>
+      )}
+    </>
+  );
+}
+
+function ContentBlockView({
+  block,
+  isLast,
+  isStreaming,
+}: {
+  block: ContentBlock;
+  isLast: boolean;
+  isStreaming?: boolean;
+}) {
+  if (block.type === 'text') {
+    return (
+      <div style={styles.contentBlockText} className="streamdown-content">
+        <Streamdown>{block.content}</Streamdown>
+      </div>
     );
   }
 
-  // User messages - simple render
-  return (
-    <div style={{ ...styles.message, ...styles.userMessage }}>
-      <div style={styles.messageRole}>You</div>
-      <div style={styles.messageContent}>{message.content}</div>
-    </div>
-  );
+  if (block.type === 'tool_group') {
+    // Separate active vs completed tools within this group
+    const activeTools = block.tools.filter(t => t.duration === undefined);
+    const completedTools = block.tools.filter(t => t.duration !== undefined);
+
+    return (
+      <div style={styles.contentBlockTools}>
+        <ToolGroupView tools={completedTools} activeTools={activeTools} />
+      </div>
+    );
+  }
+
+  return null;
 }
 
 function ToolGroupView({
@@ -221,8 +270,17 @@ function ToolGroupView({
   // Default to expanded (like Andy's UI)
   const [isExpanded, setIsExpanded] = useState(true);
 
+  // Combine and sort by startTime to maintain chronological order
+  // Active tools first (still running), then completed tools
   const allTools = [...activeTools, ...tools];
   if (allTools.length === 0) return null;
+
+  // Sort by startTime if available, otherwise maintain original order
+  allTools.sort((a, b) => {
+    const aStart = a.startTime || 0;
+    const bStart = b.startTime || 0;
+    return aStart - bStart;
+  });
 
   const hasActive = activeTools.length > 0;
   const errorCount = allTools.filter(t => t.error).length;
@@ -321,7 +379,8 @@ function ToolItemView({ tool, isActive }: { tool: ToolUseData; isActive: boolean
           )}
         </div>
 
-        {hasSummary && (
+        {/* Only show chevron if there's more content than the preview shows */}
+        {hasSummary && hasMoreLines && (
           <ChevronIcon
             className="tool-summary-chevron"
             direction={showSummary ? 'down' : 'right'}
@@ -652,5 +711,20 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '15px',
     fontWeight: 500,
     cursor: 'pointer',
+  },
+  assistantWrapper: {
+    marginBottom: '16px',
+    marginRight: '40px',
+  },
+  contentBlockText: {
+    padding: '12px 16px',
+    background: '#1e1e36',
+    borderRadius: '12px',
+    marginBottom: '8px',
+    fontSize: '15px',
+    lineHeight: 1.6,
+  },
+  contentBlockTools: {
+    marginBottom: '8px',
   },
 };

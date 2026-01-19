@@ -8,7 +8,7 @@
  * import { createClaudeServer } from '@anthropic/claude-chat-server';
  *
  * const server = createClaudeServer({
- *   port: 3000,
+ *   port: 3457,
  *   projectPath: process.cwd(),
  * });
  *
@@ -75,11 +75,12 @@ async function handleChat(
   // Generate session ID if not resuming
   const effectiveSessionId = sessionId || `new-${Date.now()}`;
 
+  // Reset chat state for new message BEFORE subscribing
+  // (so the snapshot doesn't include old tools from previous turn)
+  resetChatState(effectiveSessionId);
+
   // Subscribe client to this session
   subscribeToSession(ws, effectiveSessionId);
-
-  // Reset chat state for new message
-  resetChatState(effectiveSessionId);
 
   // Check for existing process
   const existing = activeProcesses.get(effectiveSessionId);
@@ -109,6 +110,7 @@ async function handleChat(
 
   // Set up callbacks
   let detectedSessionId = effectiveSessionId;
+  let completeSent = false;
 
   const callbacks: StreamCallbacks = {
     onInit: (sid) => {
@@ -145,7 +147,10 @@ async function handleChat(
     },
 
     onComplete: (result) => {
-      broadcastComplete(detectedSessionId, result);
+      if (!completeSent) {
+        completeSent = true;
+        broadcastComplete(detectedSessionId, result);
+      }
     },
 
     onError: (error) => {
@@ -203,8 +208,9 @@ async function handleChat(
     if (exitCode !== 0 && !processInfo.aborted) {
       const errorMessage = await parseStderr(proc.stderr);
       broadcastError(detectedSessionId, errorMessage);
-    } else if (!processInfo.aborted) {
-      // Ensure completion is sent
+    } else if (!processInfo.aborted && !completeSent) {
+      // Ensure completion is sent (only if not already sent via stream)
+      completeSent = true;
       broadcastComplete(detectedSessionId);
     }
   } catch (error) {
@@ -253,7 +259,7 @@ export function createClaudeServer(
 ): ClaudeServer {
   // Resolve configuration
   const resolvedConfig: Required<ClaudeServerConfig> = {
-    port: config.port ?? 3000,
+    port: config.port ?? 3457,
     projectPath: config.projectPath ?? process.cwd(),
     claudePath: config.claudePath ?? findClaudePath() ?? 'claude',
     onConnect: config.onConnect ?? (() => {}),
@@ -357,7 +363,7 @@ export function createClaudeServer(
 
 // If run directly, start the server
 if (import.meta.main) {
-  const port = parseInt(process.env.PORT || '3000', 10);
+  const port = parseInt(process.env.PORT || '3457', 10);
   const projectPath = process.env.PROJECT_PATH || process.cwd();
 
   const server = createClaudeServer({

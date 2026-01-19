@@ -33,6 +33,7 @@ import type {
   UseClaudeReturn,
   ConnectionStatus,
   ChatMessage,
+  ContentBlock,
   ToolUseData,
   TodoItem,
   WebSocketMessage,
@@ -85,6 +86,11 @@ export function useClaude(options: UseClaudeOptions): UseClaudeReturn {
   // Use refs to avoid stale closures in handleMessage
   const streamingContentRef = useRef('');
   const completedToolsRef = useRef<ToolUseData[]>([]);
+  const isStreamingRef = useRef(false);
+  // Track content blocks for interleaved rendering
+  const contentBlocksRef = useRef<ContentBlock[]>([]);
+  const pendingTextRef = useRef('');
+  const currentToolGroupRef = useRef<ToolUseData[]>([]);
 
   /**
    * Handle incoming WebSocket message.
@@ -104,6 +110,8 @@ export function useClaude(options: UseClaudeOptions): UseClaudeReturn {
         switch (payload.action) {
           case 'token':
             if (payload.content) {
+              // Accumulate text content
+              pendingTextRef.current += payload.content;
               setStreamingContent((prev) => {
                 const newContent = prev + payload.content;
                 streamingContentRef.current = newContent;
@@ -114,17 +122,57 @@ export function useClaude(options: UseClaudeOptions): UseClaudeReturn {
 
           case 'tool_start':
             if (payload.tool) {
-              console.log('[useClaude] tool_start:', payload.tool);
-              setActiveTools((prev) => [...prev, payload.tool!]);
+              // If we have pending text, flush it as a text block before starting tools
+              if (pendingTextRef.current.trim()) {
+                contentBlocksRef.current = [
+                  ...contentBlocksRef.current,
+                  { type: 'text', content: pendingTextRef.current, timestamp: Date.now() },
+                ];
+                pendingTextRef.current = '';
+              }
+
+              // Add tool to current tool group
+              if (!currentToolGroupRef.current.some((t) => t.id === payload.tool!.id)) {
+                currentToolGroupRef.current = [...currentToolGroupRef.current, payload.tool!];
+              }
+
+              setActiveTools((prev) => {
+                // Deduplicate - don't add if tool with this ID already exists
+                if (prev.some((t) => t.id === payload.tool!.id)) {
+                  return prev;
+                }
+                return [...prev, payload.tool!];
+              });
             }
             break;
 
           case 'tool_end':
             if (payload.tool) {
-              setActiveTools((prev) =>
-                prev.filter((t) => t.id !== payload.tool!.id)
+              // Update the tool in current tool group with completion data
+              currentToolGroupRef.current = currentToolGroupRef.current.map((t) =>
+                t.id === payload.tool!.id ? { ...t, ...payload.tool } : t
               );
+
+              setActiveTools((prev) => {
+                const filtered = prev.filter((t) => t.id !== payload.tool!.id);
+
+                // If no more active tools, flush the tool group as a content block
+                if (filtered.length === 0 && currentToolGroupRef.current.length > 0) {
+                  contentBlocksRef.current = [
+                    ...contentBlocksRef.current,
+                    { type: 'tool_group', tools: [...currentToolGroupRef.current], timestamp: Date.now() },
+                  ];
+                  currentToolGroupRef.current = [];
+                }
+
+                return filtered;
+              });
+
               setCompletedTools((prev) => {
+                // Deduplicate - don't add if tool with this ID already exists
+                if (prev.some((t) => t.id === payload.tool!.id)) {
+                  return prev;
+                }
                 const newTools = [...prev, payload.tool!];
                 completedToolsRef.current = newTools;
                 return newTools;
@@ -145,17 +193,40 @@ export function useClaude(options: UseClaudeOptions): UseClaudeReturn {
           case 'complete':
             // Finalize the assistant message
             setIsStreaming(false);
+            isStreamingRef.current = false;
+
+            // Flush any remaining pending text as a final content block
+            if (pendingTextRef.current.trim()) {
+              contentBlocksRef.current = [
+                ...contentBlocksRef.current,
+                { type: 'text', content: pendingTextRef.current, timestamp: Date.now() },
+              ];
+              pendingTextRef.current = '';
+            }
+
+            // Flush any remaining tool group (shouldn't happen, but be safe)
+            if (currentToolGroupRef.current.length > 0) {
+              contentBlocksRef.current = [
+                ...contentBlocksRef.current,
+                { type: 'tool_group', tools: [...currentToolGroupRef.current], timestamp: Date.now() },
+              ];
+              currentToolGroupRef.current = [];
+            }
 
             // Use refs to get current values (avoids stale closure)
-            // Note: Don't add payload.content - all content is already in streamingContentRef via tokens
             const finalContent = streamingContentRef.current;
             const finalTools = [...completedToolsRef.current];
+            const finalContentBlocks = [...contentBlocksRef.current];
+            const currentMsgId = currentAssistantMessageRef.current;
 
             setMessages((prev) => {
-              // Find and update the streaming message, or add new one
-              const streamingIdx = prev.findIndex(
-                (m) => m.id === currentAssistantMessageRef.current
-              );
+              // Find the streaming message by ID first, fallback to finding any streaming message
+              let streamingIdx = prev.findIndex((m) => m.id === currentMsgId);
+
+              // Fallback: find any message that's still streaming
+              if (streamingIdx < 0) {
+                streamingIdx = prev.findIndex((m) => m.isStreaming);
+              }
 
               if (streamingIdx >= 0) {
                 const updated = [...prev];
@@ -163,13 +234,15 @@ export function useClaude(options: UseClaudeOptions): UseClaudeReturn {
                   ...updated[streamingIdx],
                   content: finalContent,
                   tools: finalTools,
+                  contentBlocks: finalContentBlocks,
                   isStreaming: false,
                 };
                 return updated;
               }
 
-              // Add new message if not found
-              if (finalContent || finalTools.length > 0) {
+              // Only add a new message if we truly don't have one
+              // This should rarely happen
+              if (finalContent || finalTools.length > 0 || finalContentBlocks.length > 0) {
                 return [
                   ...prev,
                   {
@@ -178,6 +251,7 @@ export function useClaude(options: UseClaudeOptions): UseClaudeReturn {
                     content: finalContent,
                     timestamp: Date.now(),
                     tools: finalTools,
+                    contentBlocks: finalContentBlocks,
                     isStreaming: false,
                   },
                 ];
@@ -192,11 +266,15 @@ export function useClaude(options: UseClaudeOptions): UseClaudeReturn {
             setActiveTools([]);
             setCompletedTools([]);
             completedToolsRef.current = [];
+            contentBlocksRef.current = [];
+            pendingTextRef.current = '';
+            currentToolGroupRef.current = [];
             currentAssistantMessageRef.current = null;
             break;
 
           case 'error':
             setIsStreaming(false);
+            isStreamingRef.current = false;
             setError(payload.error || 'Unknown error');
             onError?.(payload.error || 'Unknown error');
 
@@ -206,6 +284,9 @@ export function useClaude(options: UseClaudeOptions): UseClaudeReturn {
             setActiveTools([]);
             setCompletedTools([]);
             completedToolsRef.current = [];
+            contentBlocksRef.current = [];
+            pendingTextRef.current = '';
+            currentToolGroupRef.current = [];
             currentAssistantMessageRef.current = null;
             break;
         }
@@ -238,6 +319,7 @@ export function useClaude(options: UseClaudeOptions): UseClaudeReturn {
               const state = payload.chatState;
               if (state.status === 'streaming') {
                 setIsStreaming(true);
+                isStreamingRef.current = true;
                 setStreamingContent(state.accumulatedContent);
               }
               if (state.tools) {
@@ -355,6 +437,11 @@ export function useClaude(options: UseClaudeOptions): UseClaudeReturn {
         return;
       }
 
+      // Prevent double-send while already streaming
+      if (isStreamingRef.current) {
+        return;
+      }
+
       // Add user message to history
       const userMessage: ChatMessage = {
         id: generateId(),
@@ -362,10 +449,10 @@ export function useClaude(options: UseClaudeOptions): UseClaudeReturn {
         content,
         timestamp: Date.now(),
       };
-      setMessages((prev) => [...prev, userMessage]);
 
       // Prepare for streaming response
       setIsStreaming(true);
+      isStreamingRef.current = true;
       setStreamingContent('');
       streamingContentRef.current = '';
       setActiveTools([]);
@@ -376,8 +463,11 @@ export function useClaude(options: UseClaudeOptions): UseClaudeReturn {
       // Create placeholder assistant message
       const assistantId = generateId();
       currentAssistantMessageRef.current = assistantId;
+
+      // Add both user and assistant messages in one update to avoid race conditions
       setMessages((prev) => [
         ...prev,
+        userMessage,
         {
           id: assistantId,
           role: 'assistant',
@@ -456,10 +546,29 @@ export function useClaude(options: UseClaudeOptions): UseClaudeReturn {
         );
         if (idx >= 0) {
           const updated = [...prev];
+          // Build live contentBlocks from refs for real-time rendering
+          const liveContentBlocks = [...contentBlocksRef.current];
+          // Add pending text if any
+          if (pendingTextRef.current.trim()) {
+            liveContentBlocks.push({
+              type: 'text',
+              content: pendingTextRef.current,
+              timestamp: Date.now(),
+            });
+          }
+          // Add current tool group if any active tools
+          if (currentToolGroupRef.current.length > 0) {
+            liveContentBlocks.push({
+              type: 'tool_group',
+              tools: [...currentToolGroupRef.current],
+              timestamp: Date.now(),
+            });
+          }
           updated[idx] = {
             ...updated[idx],
             content: streamingContent,
             tools: [...activeTools, ...completedTools],
+            contentBlocks: liveContentBlocks,
           };
           return updated;
         }

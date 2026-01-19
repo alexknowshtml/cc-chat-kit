@@ -332,18 +332,22 @@ function processEvent(
       const toolId = block.id as string;
       const toolName = block.name as string;
 
+      console.log('[Claude] content_block_start tool:', toolId, toolName, 'exists:', activeTools.has(toolId));
+
       if (!activeTools.has(toolId)) {
         const friendly = getFriendlyToolName(toolName);
+        const startTime = Date.now();
         activeTools.set(toolId, {
           id: toolId,
           name: toolName,
           friendly,
-          startTime: Date.now(),
+          startTime,
         });
         callbacks.onToolStart({
           id: toolId,
           name: toolName,
           friendly,
+          startTime,
         });
       }
     }
@@ -374,22 +378,26 @@ function processEvent(
           const inputDetail = getToolInputDetail(toolName, toolInput);
 
           const existingTool = activeTools.get(toolId);
+          console.log('[Claude] assistant message tool:', toolId, toolName, 'exists:', !!existingTool);
           if (!existingTool) {
+            // New tool - add to tracking and notify
+            const startTime = Date.now();
             activeTools.set(toolId, {
               id: toolId,
               name: toolName,
               friendly,
-              startTime: Date.now(),
+              startTime,
+            });
+            callbacks.onToolStart({
+              id: toolId,
+              name: toolName,
+              friendly,
+              input: toolInput,
+              inputDetail,
+              startTime,
             });
           }
-
-          callbacks.onToolStart({
-            id: toolId,
-            name: toolName,
-            friendly,
-            input: toolInput,
-            inputDetail,
-          });
+          // If tool already exists (from early detection), don't broadcast again
 
           // Handle TodoWrite specially
           if (toolName === 'TodoWrite' && toolInput?.todos) {
@@ -407,23 +415,52 @@ function processEvent(
     const message = event.message as Record<string, unknown> | undefined;
     const content = message?.content as Array<Record<string, unknown>> | undefined;
 
-    const toolId = content?.[0]?.tool_use_id as string | undefined;
-    const activeTool = toolId ? activeTools.get(toolId) : null;
-    const toolName = activeTool?.name || 'unknown';
-    const duration = activeTool ? Date.now() - activeTool.startTime : 0;
+    // Process ALL tool results in the content array, not just the first one
+    if (content) {
+      for (const block of content) {
+        if (block.type === 'tool_result' && block.tool_use_id) {
+          const toolId = block.tool_use_id as string;
+          const activeTool = activeTools.get(toolId);
+          const toolName = activeTool?.name || 'unknown';
+          const duration = activeTool ? Date.now() - activeTool.startTime : 0;
 
-    const summary = summarizeToolResult(toolName, result);
+          const summary = summarizeToolResult(toolName, result);
 
-    callbacks.onToolEnd({
-      id: toolId || 'unknown',
-      name: toolName,
-      summary,
-      duration,
-      error: result.isError ? String(result.content) : undefined,
-    });
+          console.log('[Claude] tool_end:', toolId, toolName, duration + 'ms');
 
-    if (toolId) {
-      activeTools.delete(toolId);
+          callbacks.onToolEnd({
+            id: toolId,
+            name: toolName,
+            summary,
+            duration,
+            error: result.isError ? String(result.content) : undefined,
+          });
+
+          activeTools.delete(toolId);
+        }
+      }
+    } else {
+      // Fallback: try old approach if content array not available
+      const toolId = (event.message as Record<string, unknown>)?.content?.[0]?.tool_use_id as string | undefined;
+      if (toolId) {
+        const activeTool = activeTools.get(toolId);
+        const toolName = activeTool?.name || 'unknown';
+        const duration = activeTool ? Date.now() - activeTool.startTime : 0;
+
+        const summary = summarizeToolResult(toolName, result);
+
+        console.log('[Claude] tool_end (fallback):', toolId, toolName, duration + 'ms');
+
+        callbacks.onToolEnd({
+          id: toolId,
+          name: toolName,
+          summary,
+          duration,
+          error: result.isError ? String(result.content) : undefined,
+        });
+
+        activeTools.delete(toolId);
+      }
     }
   }
 

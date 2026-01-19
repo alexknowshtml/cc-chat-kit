@@ -43,6 +43,7 @@ export interface ToolUseData {
   error?: string;
   summary?: string;
   duration?: number;
+  startTime?: number;
 }
 
 export interface TodoItem {
@@ -125,6 +126,13 @@ export interface UseClaudeOptions {
 }
 
 /**
+ * A content block within a message - either text or a tool group.
+ */
+export type ContentBlock =
+  | { type: 'text'; content: string; timestamp: number }
+  | { type: 'tool_group'; tools: ToolUseData[]; timestamp: number };
+
+/**
  * A message in the chat history.
  */
 export interface ChatMessage {
@@ -132,7 +140,10 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
+  /** @deprecated Use contentBlocks for interleaved rendering */
   tools?: ToolUseData[];
+  /** Interleaved content blocks (text and tool groups in order) */
+  contentBlocks?: ContentBlock[];
   isStreaming?: boolean;
 }
 

@@ -1,0 +1,15 @@
+{
+  "name": "claude-chat",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
+  "scripts": {
+    "dev:server": "bun run --watch packages/server/src/index.ts",
+    "dev:example": "cd examples/basic-chat && bun run dev",
+    "build": "bun run build:server && bun run build:react",
+    "build:server": "cd packages/server && bun run build",
+    "build:react": "cd packages/react && bun run build"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "name": "@anthropic/claude-chat-server",
+  "version": "0.1.0",
+  "description": "WebSocket server wrapper for Claude CLI with streaming support",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "bun": ">=1.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anthropics/claude-chat"
+  },
+  "keywords": [
+    "claude",
+    "anthropic",
+    "cli",
+    "chat",
+    "websocket",
+    "streaming"
+  ]
+}

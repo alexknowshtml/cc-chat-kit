@@ -172,27 +172,40 @@ function MessageView({ message, isStreaming }: { message: ChatMessage; isStreami
   const completedTools = message.tools?.filter(t => t.duration) || [];
   const hasTools = (message.tools?.length || 0) > 0;
 
+  // For assistant messages, render tools as a separate element above the message bubble
+  if (!isUser) {
+    return (
+      <>
+        {/* Tool group - separate bubble above message */}
+        {hasTools && (
+          <div style={styles.toolGroupWrapper}>
+            <div style={styles.messageRole}>Claude</div>
+            <ToolGroupView
+              tools={completedTools}
+              activeTools={activeTools}
+            />
+          </div>
+        )}
+
+        {/* Message bubble - only if there's content or streaming without tools */}
+        {(message.content || (isStreaming && !hasTools)) && (
+          <div style={{ ...styles.message, ...styles.assistantMessage }}>
+            {!hasTools && <div style={styles.messageRole}>Claude</div>}
+            <div style={styles.messageContent}>
+              {message.content || '...'}
+              {isStreaming && message.content && <span style={styles.cursor}>▋</span>}
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  // User messages - simple render
   return (
-    <div
-      style={{
-        ...styles.message,
-        ...(isUser ? styles.userMessage : styles.assistantMessage),
-      }}
-    >
-      <div style={styles.messageRole}>{isUser ? 'You' : 'Claude'}</div>
-
-      {/* Show tools before text content */}
-      {hasTools && (
-        <ToolGroupView
-          tools={completedTools}
-          activeTools={activeTools}
-        />
-      )}
-
-      <div style={styles.messageContent}>
-        {message.content || (isStreaming && !hasTools && '...')}
-        {isStreaming && message.content && <span style={styles.cursor}>▋</span>}
-      </div>
+    <div style={{ ...styles.message, ...styles.userMessage }}>
+      <div style={styles.messageRole}>You</div>
+      <div style={styles.messageContent}>{message.content}</div>
     </div>
   );
 }
@@ -436,6 +449,10 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: '16px',
     padding: '16px',
     borderRadius: '16px',
+  },
+  toolGroupWrapper: {
+    marginBottom: '8px',
+    marginRight: '40px',
   },
   userMessage: {
     background: 'rgba(99, 102, 241, 0.15)',

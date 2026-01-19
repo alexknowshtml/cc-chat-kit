@@ -1,5 +1,5 @@
 {
-  "name": "claude-chat",
+  "name": "cck",
   "private": true,
   "workspaces": [
     "packages/*",

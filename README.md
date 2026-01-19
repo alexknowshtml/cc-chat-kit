@@ -1,13 +1,17 @@
-# Claude Chat
+# CCK (Claude Code Kit)
 
-A lightweight WebSocket wrapper around the Claude CLI for building chat interfaces with streaming support.
+> **⚠️ DISCLAIMER: This is an unofficial, community project. It is not affiliated with, endorsed by, or supported by Anthropic. Use at your own risk.**
+
+A lightweight WebSocket wrapper around the Claude Code CLI for building chat interfaces with streaming support.
 
 ## What This Is
 
-This package provides:
+CCK (Claude Code Kit) provides tools for building custom UIs on top of the Claude Code CLI:
 
-1. **Server** (`@anthropic/claude-chat-server`) - A Bun server that wraps the Claude CLI, exposing it via WebSocket with streaming support
-2. **React Client** (`@anthropic/claude-chat-react`) - A React hook for building chat UIs that connect to the server
+1. **Server** (`cck-server`) - A Bun server that wraps the Claude Code CLI, exposing it via WebSocket with streaming support
+2. **React Client** (`cck-react`) - A React hook for building chat UIs that connect to the server
+
+This project wraps the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (Anthropic's official terminal tool) to enable building web-based interfaces. It does **not** use the Anthropic API directly—it spawns the CLI as a subprocess.
 
 ## Prerequisites
 
@@ -48,7 +52,7 @@ Open http://localhost:5173 to chat with Claude.
 ## Server Usage
 
 ```typescript
-import { createClaudeServer } from '@anthropic/claude-chat-server';
+import { createClaudeServer } from 'cck-server';
 
 const server = createClaudeServer({
   port: 3457,
@@ -73,7 +77,7 @@ server.start();
 ## React Client Usage
 
 ```tsx
-import { useClaude } from '@anthropic/claude-chat-react';
+import { useClaude } from 'cck-react';
 
 function Chat() {
   const {
@@ -399,6 +403,18 @@ Client disconnects (network issue, etc.)
 - **Session Resume** - Continue previous conversations
 - **Reconnection** - Automatic reconnect with exponential backoff
 - **Catch-up** - Recover missed events after reconnection
+
+## Disclaimer
+
+**This is an unofficial, community-developed project.**
+
+- CCK is **not** affiliated with, endorsed by, or supported by Anthropic
+- "Claude" and "Claude Code" are trademarks of Anthropic
+- This project wraps the Claude Code CLI—it does not access Anthropic's API directly
+- No guarantees are made about compatibility with future CLI versions
+- Use at your own risk
+
+For official Anthropic products and documentation, visit [anthropic.com](https://anthropic.com).
 
 ## License
 

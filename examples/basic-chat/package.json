@@ -10,7 +10,7 @@
     "server": "bun run ../../packages/server/src/index.ts"
   },
   "dependencies": {
-    "@anthropic/claude-chat-react": "workspace:*",
+    "cck-react": "workspace:*",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "streamdown": "^2.1.0"

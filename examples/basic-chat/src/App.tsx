@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { useClaude } from '@anthropic/claude-chat-react';
+import { useClaude } from 'cck-react';
 import { Streamdown } from 'streamdown';
-import type { ChatMessage, ToolUseData, TodoItem, ContentBlock } from '@anthropic/claude-chat-react';
+import type { ChatMessage, ToolUseData, TodoItem, ContentBlock } from 'cck-react';
 
 const WS_URL = 'ws://100.85.122.99:3457/ws';
 

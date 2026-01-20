@@ -1,7 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useClaude } from 'cc-chat-react';
 import { Streamdown } from 'streamdown';
-import { code } from '@streamdown/code';
 import type { ChatMessage, ToolUseData, TodoItem, ContentBlock } from 'cc-chat-react';
 
 const WS_URL = 'ws://100.85.122.99:3457/ws';
@@ -110,10 +109,128 @@ function MoonIcon({ className }: { className?: string }) {
   );
 }
 
+function CopyIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
+// Custom components for Streamdown
+const streamdownComponents = {
+  // Code blocks with header bar and copy button
+  pre: ({ children }: { children?: React.ReactNode }) => {
+    const [copied, setCopied] = useState(false);
+
+    // Extract text content for copying
+    const getTextContent = (node: React.ReactNode): string => {
+      if (typeof node === 'string') return node;
+      if (typeof node === 'number') return String(node);
+      if (!node) return '';
+      if (Array.isArray(node)) return node.map(getTextContent).join('');
+      if (typeof node === 'object' && 'props' in node) {
+        return getTextContent((node as React.ReactElement).props.children);
+      }
+      return '';
+    };
+
+    // Extract language from code child's className
+    const getLanguage = (): string => {
+      if (children && typeof children === 'object' && 'props' in children) {
+        const className = (children as React.ReactElement).props.className || '';
+        const match = className.match(/language-(\w+)/);
+        return match ? match[1] : 'text';
+      }
+      return 'text';
+    };
+
+    const handleCopy = useCallback(async () => {
+      const text = getTextContent(children);
+      try {
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 3000);
+      } catch {
+        // Fallback
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.cssText = 'position:fixed;top:0;left:0;opacity:0;';
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 3000);
+      }
+    }, [children]);
+
+    const language = getLanguage();
+
+    return (
+      <div className="code-block">
+        <div className="code-block-header">
+          <span className="code-block-language">{language}</span>
+          <button onClick={handleCopy} className={`code-block-copy ${copied ? 'copied' : ''}`}>
+            {copied ? (
+              <>
+                <CheckIcon className="code-block-copy-icon" />
+                <span>Copied!</span>
+              </>
+            ) : (
+              <>
+                <CopyIcon className="code-block-copy-icon" />
+                <span>Copy</span>
+              </>
+            )}
+          </button>
+        </div>
+        <pre className="code-block-content">
+          {children}
+        </pre>
+      </div>
+    );
+  },
+
+  // Inline code
+  code: ({ children, className }: { children?: React.ReactNode; className?: string }) => {
+    const isInline = !className;
+    if (isInline) {
+      return <code className="inline-code">{children}</code>;
+    }
+    return <code className={className}>{children}</code>;
+  },
+};
+
+// Type for pasted text blocks
+interface PastedBlock {
+  id: string;
+  content: string;
+  lineCount: number;
+}
+
 export default function App() {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { theme, toggle: toggleTheme } = useTheme();
+
+  // Pasted content tracking - stores actual content while showing placeholders
+  const [pastedBlocks, setPastedBlocks] = useState<PastedBlock[]>([]);
+  const pasteCounterRef = useRef(0);
+
+  // Auto-resize textarea
+  const adjustTextareaHeight = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+  }, []);
+
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [input, adjustTextareaHeight]);
 
   const {
     status,
@@ -140,9 +257,75 @@ export default function App() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isStreaming) return;
-    send(input.trim());
+
+    // Expand placeholders back to full content before sending
+    let fullText = input;
+    for (const block of pastedBlocks) {
+      const placeholder = `[Pasted text #${block.id} +${block.lineCount} lines]`;
+      fullText = fullText.replace(placeholder, block.content);
+    }
+
+    send(fullText.trim());
     setInput('');
+    setPastedBlocks([]);
+    pasteCounterRef.current = 0;
+
+    // Reset textarea height after clearing
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
   };
+
+  // Handle keyboard shortcuts in textarea
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Enter without shift submits the form
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e);
+    }
+    // Shift+Enter allows normal newline behavior
+  };
+
+  // Handle paste - collapse multi-line pastes into placeholders
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const pastedText = e.clipboardData.getData('text');
+    const lines = pastedText.split('\n');
+
+    // Only collapse if pasting 4+ lines
+    if (lines.length < 4) return;
+
+    e.preventDefault();
+
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    // Generate unique ID for this paste
+    pasteCounterRef.current += 1;
+    const pasteId = String(pasteCounterRef.current);
+    const lineCount = lines.length;
+
+    // Store the actual content
+    const newBlock: PastedBlock = {
+      id: pasteId,
+      content: pastedText,
+      lineCount,
+    };
+    setPastedBlocks(prev => [...prev, newBlock]);
+
+    // Insert placeholder at cursor position
+    const placeholder = `[Pasted text #${pasteId} +${lineCount} lines]`;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const currentValue = input;
+    const newValue = currentValue.substring(0, start) + placeholder + currentValue.substring(end);
+
+    setInput(newValue);
+
+    // Move cursor after placeholder
+    setTimeout(() => {
+      textarea.selectionStart = textarea.selectionEnd = start + placeholder.length;
+    }, 0);
+  }, [input]);
 
   return (
     <div className="container">
@@ -195,19 +378,22 @@ export default function App() {
 
         {/* Input */}
         <form onSubmit={handleSubmit} className="input-form">
-          <input
-            type="text"
+          <textarea
+            ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder={
               status !== 'connected'
                 ? 'Connecting...'
                 : isStreaming
                 ? 'Claude is responding...'
-                : 'Type a message...'
+                : 'Type a message... (Shift+Enter for new line)'
             }
             disabled={status !== 'connected'}
-            className="input"
+            className={`input ${pastedBlocks.length > 0 ? 'has-pasted' : ''}`}
+            rows={1}
           />
           {isStreaming ? (
             <button type="button" onClick={cancel} className="cancel-button">
@@ -284,7 +470,7 @@ function MessageView({ message, isStreaming }: { message: ChatMessage; isStreami
           <div className="message-content streamdown-content">
             {message.content ? (
               <>
-                <Streamdown plugins={{ code }}>{message.content}</Streamdown>
+                <Streamdown components={streamdownComponents} controls={{ code: false }}>{message.content}</Streamdown>
                 {isStreaming && <span className="cursor">▋</span>}
               </>
             ) : (
@@ -309,7 +495,7 @@ function ContentBlockView({
   if (block.type === 'text') {
     return (
       <div className="content-block-text streamdown-content">
-        <Streamdown plugins={{ code }}>{block.content}</Streamdown>
+        <Streamdown components={streamdownComponents} controls={{ code: false }}>{block.content}</Streamdown>
       </div>
     );
   }

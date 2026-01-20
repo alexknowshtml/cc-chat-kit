@@ -31,8 +31,6 @@ This project wraps the [Claude Code CLI](https://docs.anthropic.com/en/docs/clau
 
 ### Example App (optional dependencies for markdown rendering)
 - [streamdown](https://www.npmjs.com/package/streamdown) - Streaming markdown renderer
-- [@streamdown/code](https://www.npmjs.com/package/@streamdown/code) - Code block plugin with syntax highlighting
-- [shiki](https://www.npmjs.com/package/shiki) - Syntax highlighter (peer dependency of @streamdown/code)
 
 ## Quick Start
 
@@ -63,7 +61,7 @@ bun install
 bun run dev
 ```
 
-Open http://localhost:5173 to chat with Claude.
+Open http://localhost:3456 to chat with Claude.
 
 ## Server Usage
 

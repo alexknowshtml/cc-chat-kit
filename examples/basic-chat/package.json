@@ -10,11 +10,9 @@
     "server": "bun run ../../packages/server/src/index.ts"
   },
   "dependencies": {
-    "@streamdown/code": "^1.0.1",
     "cc-chat-react": "workspace:*",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "shiki": "^3.21.0",
     "streamdown": "^2.1.0"
   },
   "devDependencies": {

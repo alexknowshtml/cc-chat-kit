@@ -40,6 +40,15 @@ This project wraps the [Claude Code CLI](https://docs.anthropic.com/en/docs/clau
 
 The server spawns Claude CLI with `--output-format stream-json` and parses the streaming output, broadcasting events to connected WebSocket clients.
 
+## Features
+
+- **Streaming** - Real-time token streaming as Claude responds
+- **Tool Visibility** - See which tools Claude is using and their results
+- **Todo Tracking** - Display Claude's task list from TodoWrite
+- **Session Resume** - Continue previous conversations
+- **Reconnection** - Automatic reconnect with exponential backoff
+- **Catch-up** - Recover missed events after reconnection
+
 ---
 
 ## Quick Start
@@ -459,15 +468,6 @@ Client disconnects (network issue, etc.)
 │  - Streaming continues if in progress                         │
 └───────────────────────────────────────────────────────────────┘
 ```
-
-## Features
-
-- **Streaming** - Real-time token streaming as Claude responds
-- **Tool Visibility** - See which tools Claude is using and their results
-- **Todo Tracking** - Display Claude's task list from TodoWrite
-- **Session Resume** - Continue previous conversations
-- **Reconnection** - Automatic reconnect with exponential backoff
-- **Catch-up** - Recover missed events after reconnection
 
 ## Disclaimer
 

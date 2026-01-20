@@ -53,9 +53,22 @@ Open http://localhost:3456 to chat with Claude.
 
 ---
 
+## ⚠️ Security: LAN Only
+
+**Do NOT expose CC Chat Kit directly to the public internet.**
+
+This server gives full access to Claude Code on your machine, which can read/write files, execute commands, and more. Exposing it publicly is a significant security risk.
+
+**Safe options:**
+- Run on your local network (LAN) only
+- Use Tailscale (recommended) for secure remote access
+- Never port-forward ports 3456/3457 to the internet
+
+---
+
 ## Remote Access with Tailscale (Recommended)
 
-To access CC Chat Kit from your phone or other devices, we recommend [Tailscale](https://tailscale.com)—a zero-config VPN that creates a secure private network between your devices.
+To access CC Chat Kit from your phone or other devices, we recommend [Tailscale](https://tailscale.com)—a zero-config VPN that creates a secure private network between your devices. Unlike exposing ports to the internet, Tailscale keeps your traffic encrypted and private.
 
 **Why Tailscale?**
 - No port forwarding or firewall configuration needed

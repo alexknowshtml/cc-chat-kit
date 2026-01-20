@@ -1,5 +1,5 @@
 {
-  "name": "cck-server",
+  "name": "cc-chat-server",
   "version": "0.1.0",
   "description": "WebSocket server wrapper for Claude Code CLI with streaming support (unofficial)",
   "type": "module",
@@ -30,7 +30,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/alexknowshtml/cck"
+    "url": "https://github.com/alexknowshtml/cc-chat-kit"
   },
   "keywords": [
     "claude-code",
@@ -38,6 +38,6 @@
     "chat",
     "websocket",
     "streaming",
-    "cck"
+    "cc-chat-kit"
   ]
 }

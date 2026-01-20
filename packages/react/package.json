@@ -1,5 +1,5 @@
 {
-  "name": "cck-react",
+  "name": "cc-chat-react",
   "version": "0.1.0",
   "description": "React hooks for Claude Code CLI chat interface (unofficial)",
   "type": "module",
@@ -30,13 +30,13 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/alexknowshtml/cck"
+    "url": "https://github.com/alexknowshtml/cc-chat-kit"
   },
   "keywords": [
     "claude-code",
     "react",
     "hooks",
     "chat",
-    "cck"
+    "cc-chat-kit"
   ]
 }

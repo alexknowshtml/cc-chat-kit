@@ -1,5 +1,5 @@
 {
-  "name": "cck",
+  "name": "cc-chat-kit",
   "private": true,
   "workspaces": [
     "packages/*",

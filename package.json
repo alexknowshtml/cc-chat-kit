@@ -10,6 +10,9 @@
     "dev:example": "cd examples/basic-chat && bun run dev",
     "build": "bun run build:server && bun run build:react",
     "build:server": "cd packages/server && bun run build",
-    "build:react": "cd packages/react && bun run build"
+    "build:react": "cd packages/react && bun run build",
+    "test": "bun test",
+    "test:server": "bun test packages/server",
+    "test:react": "bun test packages/react"
   }
 }

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useClaude } from 'cc-chat-react';
 import { Streamdown } from 'streamdown';
+import { code } from '@streamdown/code';
 import type { ChatMessage, ToolUseData, TodoItem, ContentBlock } from 'cc-chat-react';
 
 const WS_URL = 'ws://100.85.122.99:3457/ws';
@@ -147,7 +148,7 @@ export default function App() {
     <div className="container">
       {/* Header */}
       <header className="header">
-        <h1 className="title">Claude Chat</h1>
+        <h1 className="title">Claude Code Chat UI</h1>
         <div className="header-right">
           <button onClick={toggleTheme} className="theme-toggle" aria-label="Toggle theme">
             {theme === 'light' ? <MoonIcon className="theme-icon" /> : <SunIcon className="theme-icon" />}
@@ -246,7 +247,7 @@ function MessageView({ message, isStreaming }: { message: ChatMessage; isStreami
   if (hasContentBlocks) {
     return (
       <div className="assistant-wrapper">
-        <div className="message-role">Claude</div>
+        <div className="message-role">Claude Code</div>
         {message.contentBlocks!.map((block, idx) => (
           <ContentBlockView
             key={idx}
@@ -269,7 +270,7 @@ function MessageView({ message, isStreaming }: { message: ChatMessage; isStreami
     <>
       {hasTools && (
         <div className="tool-group-wrapper">
-          <div className="message-role">Claude</div>
+          <div className="message-role">Claude Code</div>
           <ToolGroupView
             tools={completedTools}
             activeTools={activeTools}
@@ -279,10 +280,16 @@ function MessageView({ message, isStreaming }: { message: ChatMessage; isStreami
 
       {(message.content || (isStreaming && !hasTools)) && (
         <div className="message assistant-message">
-          {!hasTools && <div className="message-role">Claude</div>}
+          {!hasTools && <div className="message-role">Claude Code</div>}
           <div className="message-content streamdown-content">
-            <Streamdown>{message.content || '...'}</Streamdown>
-            {isStreaming && message.content && <span className="cursor">▋</span>}
+            {message.content ? (
+              <>
+                <Streamdown plugins={{ code }}>{message.content}</Streamdown>
+                {isStreaming && <span className="cursor">▋</span>}
+              </>
+            ) : (
+              <span className="thinking">Thinking<span className="thinking-dots"></span></span>
+            )}
           </div>
         </div>
       )}
@@ -302,7 +309,7 @@ function ContentBlockView({
   if (block.type === 'text') {
     return (
       <div className="content-block-text streamdown-content">
-        <Streamdown>{block.content}</Streamdown>
+        <Streamdown plugins={{ code }}>{block.content}</Streamdown>
       </div>
     );
   }

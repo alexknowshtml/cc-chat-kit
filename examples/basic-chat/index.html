@@ -96,6 +96,24 @@
         50% { opacity: 0.5; }
       }
 
+      @keyframes dots {
+        0%, 20% { content: ''; }
+        40% { content: '.'; }
+        60% { content: '..'; }
+        80%, 100% { content: '...'; }
+      }
+
+      /* Thinking indicator */
+      .thinking {
+        color: var(--color-text-muted);
+        font-style: italic;
+      }
+
+      .thinking-dots::after {
+        content: '';
+        animation: dots 1.5s steps(1, end) infinite;
+      }
+
       /* Layout */
       .container {
         display: flex;
@@ -579,16 +597,15 @@
       }
 
       .streamdown-content code {
-        background: var(--color-code-bg);
-        padding: 0.15em 0.4em;
+        background: var(--color-bg-tertiary);
+        padding: 0.2em 0.5em;
         border-radius: 4px;
-        font-size: 0.9em;
+        font-size: 0.85em;
         font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
       }
 
       .streamdown-content pre {
-        background: var(--color-code-block-bg);
-        color: var(--color-code-block-text);
+        background: var(--color-bg-tertiary);
         padding: 12px 16px;
         border-radius: 8px;
         overflow-x: auto;
@@ -598,8 +615,62 @@
       .streamdown-content pre code {
         background: none;
         padding: 0;
+        font-size: 0.8em;
+      }
+
+      /* Streamdown code plugin styles */
+      [data-code-block-container="true"] {
+        border: 1px solid var(--color-border);
+        border-radius: 8px;
+        overflow: hidden;
+        margin: 0.75em 0;
+      }
+
+      [data-code-block-header="true"] {
+        background: var(--color-bg-tertiary);
+        padding: 8px 12px;
+        font-size: 12px;
+        color: var(--color-text-muted);
+        border-bottom: 1px solid var(--color-border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      [data-streamdown="code-block"] {
+        background: var(--color-bg-secondary);
+        padding: 12px 16px;
+        margin: 0;
+        overflow-x: auto;
+      }
+
+      [data-streamdown="code-block"] code {
+        background: none;
+        padding: 0;
+        font-size: 0.8em;
+        line-height: 1.5;
+      }
+
+      [data-streamdown="inline-code"] {
+        background: var(--color-bg-tertiary);
+        padding: 0.2em 0.5em;
+        border-radius: 4px;
         font-size: 0.85em;
-        color: inherit;
+      }
+
+      /* Hide the copy/download buttons from streamdown code plugin */
+      [data-code-block-header="true"] button {
+        background: var(--color-bg-secondary);
+        border: 1px solid var(--color-border);
+        border-radius: 4px;
+        padding: 4px 8px;
+        cursor: pointer;
+        color: var(--color-text-muted);
+        font-size: 11px;
+      }
+
+      [data-code-block-header="true"] button:hover {
+        background: var(--color-bg-tertiary);
       }
 
       .streamdown-content ul, .streamdown-content ol {
@@ -646,6 +717,29 @@
         border: none;
         border-top: 1px solid var(--color-border);
         margin: 1em 0;
+      }
+
+      .streamdown-content table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0.75em 0;
+        font-size: 0.9em;
+      }
+
+      .streamdown-content th,
+      .streamdown-content td {
+        padding: 8px 12px;
+        text-align: left;
+        border: 1px solid var(--color-border);
+      }
+
+      .streamdown-content th {
+        background: var(--color-bg-secondary);
+        font-weight: 600;
+      }
+
+      .streamdown-content tr:nth-child(even) {
+        background: var(--color-bg-secondary);
       }
     </style>
   </head>

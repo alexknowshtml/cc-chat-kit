@@ -15,8 +15,24 @@ This project wraps the [Claude Code CLI](https://docs.anthropic.com/en/docs/clau
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) runtime
-- [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated
+- [Bun](https://bun.sh) runtime (v1.0+)
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated
+- Node.js 18+ (for the React client)
+
+## Dependencies
+
+### Server (`cc-chat-server`)
+- Bun runtime (uses `Bun.serve` and `Bun.spawn`)
+- No external npm dependencies
+
+### React Client (`cc-chat-react`)
+- React 18+
+- No external npm dependencies
+
+### Example App (optional dependencies for markdown rendering)
+- [streamdown](https://www.npmjs.com/package/streamdown) - Streaming markdown renderer
+- [@streamdown/code](https://www.npmjs.com/package/@streamdown/code) - Code block plugin with syntax highlighting
+- [shiki](https://www.npmjs.com/package/shiki) - Syntax highlighter (peer dependency of @streamdown/code)
 
 ## Quick Start
 

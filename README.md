@@ -2,16 +2,83 @@
 
 > **⚠️ DISCLAIMER: This is an unofficial, community project. It is not affiliated with, endorsed by, or supported by Anthropic. Use at your own risk.**
 
-A lightweight WebSocket wrapper around the Claude Code CLI for building chat interfaces with streaming support.
+## Why CC Chat Kit?
 
-## What This Is
+**You love Claude Code. You want to use it from anywhere.**
 
-CC Chat Kit provides tools for building custom UIs on top of the Claude Code CLI:
+Claude Code is powerful, but it's tied to your terminal. CC Chat Kit lets you build a web interface so you can chat with Claude from your phone, tablet, or any browser—while Claude Code runs on your home machine or a cloud VM.
+
+**Common setups:**
+- 🏠 **Home workstation** → Access from your phone on the couch
+- ☁️ **Cloud VM** → Chat from any device, anywhere
+- 💻 **Work laptop** → Continue conversations from your personal phone
+
+The key: run CC Chat Kit on the same machine where Claude Code is installed and authenticated. Then connect to it remotely.
+
+## What's Included
 
 1. **Server** (`cc-chat-server`) - A Bun server that wraps the Claude Code CLI, exposing it via WebSocket with streaming support
 2. **React Client** (`cc-chat-react`) - A React hook for building chat UIs that connect to the server
 
 This project wraps the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (Anthropic's official terminal tool) to enable building web-based interfaces. It does **not** use the Anthropic API directly—it spawns the CLI as a subprocess.
+
+## Quick Start
+
+### 1. Install dependencies
+
+```bash
+git clone https://github.com/alexknowshtml/cc-chat-kit.git
+cd cc-chat-kit
+bun install
+```
+
+### 2. Start the server
+
+```bash
+bun run dev:server
+```
+
+The server runs on `ws://localhost:3457/ws` by default.
+
+### 3. Run the example app
+
+```bash
+# In another terminal
+cd examples/basic-chat
+bun install
+bun run dev
+```
+
+Open http://localhost:3456 to chat with Claude.
+
+---
+
+## Remote Access with Tailscale (Recommended)
+
+To access CC Chat Kit from your phone or other devices, we recommend [Tailscale](https://tailscale.com)—a zero-config VPN that creates a secure private network between your devices.
+
+**Why Tailscale?**
+- No port forwarding or firewall configuration needed
+- Works across home networks, mobile data, and cloud VMs
+- Free for personal use (up to 100 devices)
+- Takes about 5 minutes to set up
+
+**Setup overview:**
+1. Install Tailscale on your CC Chat Kit server (home machine or cloud VM)
+2. Install Tailscale on your phone/tablet
+3. Both devices get private IPs (like `100.x.x.x`) that can reach each other
+4. Access your chat UI at `http://100.x.x.x:3456` from anywhere
+
+**Getting started:**
+- [Tailscale Quickstart Guide](https://tailscale.com/kb/1017/install)
+- [How to Use Tailscale: Step-by-Step Setup Guide for Beginners](https://www.learnlinux.tv/how-to-use-tailscale-step-by-step-setup-guide-for-beginners/) (video tutorial)
+
+**Tip:** After installing Tailscale, update the `WS_URL` in your example app to use your Tailscale IP:
+```typescript
+const WS_URL = 'ws://100.x.x.x:3457/ws';  // Your Tailscale IP
+```
+
+---
 
 ## Prerequisites
 
@@ -27,41 +94,10 @@ This project wraps the [Claude Code CLI](https://docs.anthropic.com/en/docs/clau
 
 ### React Client (`cc-chat-react`)
 - React 18+
-- No external npm dependencies
+- [Zod](https://zod.dev) (runtime payload validation)
 
 ### Example App (optional dependencies for markdown rendering)
 - [streamdown](https://www.npmjs.com/package/streamdown) - Streaming markdown renderer
-
-## Quick Start
-
-### 1. Install dependencies
-
-```bash
-bun install
-```
-
-### 2. Start the server
-
-```bash
-# From the repo root
-bun run dev:server
-
-# Or directly
-bun run packages/server/src/index.ts
-```
-
-The server runs on `ws://localhost:3457/ws` by default.
-
-### 3. Run the example app
-
-```bash
-# In another terminal
-cd examples/basic-chat
-bun install
-bun run dev
-```
-
-Open http://localhost:3456 to chat with Claude.
 
 ## Server Usage
 
